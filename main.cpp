@@ -9,12 +9,15 @@
 #include <map>
 #include <utility>
 
-template <class AbstractProduct, typename IdentifierType, typename ProductCreator>
+// Generic multi-function factory
+
+template <class AbstractProduct, typename IdentifierType>
 class Factory
 {
 public:
-    bool Register(const IdentifierType& id, ProductCreator creator) {
-        return associations_.emplace(id, creator).second;
+    template <typename Callable>
+    bool Register(const IdentifierType& id, Callable creator) {
+        return associations_.emplace(id, Impl<Callable, decltype(&Callable::operator())>(creator)).second;
     }
 
     bool Unregister(const IdentifierType& id) {
@@ -31,13 +34,27 @@ public:
     }
 
 private:
-    std::map<IdentifierType, ProductCreator> associations_;
+    struct Concept {
+        template <typename... Args>
+        AbstractProduct operator()(Args... args) {}
+    };
+
+    template <typename Callable, typename Signature>
+    struct Impl {};
+
+    template <typename Callable, typename ReturnType, typename... Args>
+    struct Impl<Callable, ReturnType(Callable::*)(Args...)> : Concept {
+        Impl(Callable f) : f{f} {}
+
+        ReturnType operator()(Args... args) const {
+            return f(args...);
+        }
+        boost::function<ReturnType(Args...)> f;
+    };
+
+    std::map<IdentifierType, Concept> associations_;
 };
 
-namespace te = boost::type_erasure;
-template <typename... Signatures>
-using multifunction = te::any< boost::mpl::vector< te::copy_constructible<>,
-te::typeid_<>, te::relaxed, te::callable<Signatures>... > >;
 
 struct Arity {
     virtual ~Arity() = default;
@@ -49,15 +66,38 @@ struct Unary : Arity {
     Unary(double) {}
 };
 
-using MultiCtors = multifunction<Arity *(), Arity *(double)>;
+struct NullaryFactory
+{
+    Nullary *operator()() { return new Nullary(); }
+};
+
+struct UnaryFactory
+{
+    Unary *operator()(int x) { return new Unary(x); }
+};
 
 int main(void)
 {
-    Factory<Arity*, int, boost::function<Arity*()>> factory;
-    factory.Register(0, boost::factory<Nullary *>() );
+    Factory<Arity*, int> factory;
+    factory.Register(0, NullaryFactory() );
+    factory.Register(1, UnaryFactory() );
+
+    auto a = factory.CreateObject(0);
+    // auto b = factory.CreateObject(1, 7);
+
+    // factory.Register(0, [&](){ return new Nullary(); } );
+    // factory.Register(0, boost::factory<Nullary *>());
+    // factory.Register(0, boost::bind( boost::factory<Nullary *>() ));
+    // factory.Register(1, boost::bind( boost::factory<Unary *>(), _1 ));
     // MultiCtors nullaryFactory = boost::bind( boost::factory<Nullary *>() );
     // MultiCtors nullaryLambda = [](){ return new Nullary(); };
     // MultiCtors unaryLambda = [](double x){ return new Unary(x); };
     // MultiCtors unaryFactory = boost::bind( boost::factory<Unary *>(), _1 );
 }
 
+
+namespace te = boost::type_erasure;
+template <typename... Signatures>
+using multifunction = te::any< boost::mpl::vector< te::copy_constructible<>,
+te::typeid_<>, te::relaxed, te::callable<Signatures>... > >;
+using MultiCtors = multifunction<Arity *(), Arity *(double)>;
