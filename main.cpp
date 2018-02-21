@@ -1,19 +1,33 @@
-#include <boost/type_erasure/any.hpp>
-#include <boost/type_erasure/builtin.hpp>
-#include <boost/type_erasure/callable.hpp>
-#include <boost/mpl/vector.hpp>
-#include <boost/bind.hpp>
 #include <boost/functional/factory.hpp>
 #include <boost/function.hpp>
+#include <boost/bind.hpp>
 
+#include <functional>
 #include <map>
+#include <tuple>
+#include <type_traits>
 #include <utility>
 
-template <class AbstractProduct, typename IdentifierType, typename ProductCreator>
+template <typename T, typename Signature>
+struct signature_impl;
+
+template <typename T, typename ReturnType, typename... Args>
+struct signature_impl<T, ReturnType(T::*)(Args...)>
+{
+    using type = ReturnType(Args...);
+};
+
+template <typename T>
+using signature_t = signature_impl<T, decltype(&T::operator())>;
+
+template <class AbstractProduct, typename IdentifierType>
 class Factory
 {
+    using AssociativeContainers = std::map<IdentifierType, boost::factory<AbstractProduct>>;
 public:
+    template <typename ProductCreator>
     bool Register(const IdentifierType& id, ProductCreator creator) {
+        // auto &foo = std::get<std::map<IdentifierType, boost::factory<AbstractProduct>>>(associations_);
         return associations_.emplace(id, creator).second;
     }
 
@@ -31,13 +45,9 @@ public:
     }
 
 private:
-    std::map<IdentifierType, ProductCreator> associations_;
+    AssociativeContainers associations_;
 };
 
-namespace te = boost::type_erasure;
-template <typename... Signatures>
-using multifunction = te::any< boost::mpl::vector< te::copy_constructible<>,
-te::typeid_<>, te::relaxed, te::callable<Signatures>... > >;
 
 struct Arity {
     virtual ~Arity() = default;
@@ -49,15 +59,11 @@ struct Unary : Arity {
     Unary(double) {}
 };
 
-using MultiCtors = multifunction<Arity *(), Arity *(double)>;
 
 int main(void)
 {
-    Factory<Arity*, int, boost::function<Arity*()>> factory;
-    factory.Register(0, boost::factory<Nullary *>() );
-    // MultiCtors nullaryFactory = boost::bind( boost::factory<Nullary *>() );
-    // MultiCtors nullaryLambda = [](){ return new Nullary(); };
-    // MultiCtors unaryLambda = [](double x){ return new Unary(x); };
-    // MultiCtors unaryFactory = boost::bind( boost::factory<Unary *>(), _1 );
+    Factory<Arity*, int> factory;
+    factory.Register(0, boost::factory<Nullary*>() );
+    // factory.Register(0, boost::function<Unary*(double)>(boost::bind(boost::factory<Unary*>(), _1)) );
 }
 
