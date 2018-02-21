@@ -2,33 +2,22 @@
 #include <boost/function.hpp>
 #include <boost/bind.hpp>
 
-#include <functional>
+#include <cassert>
 #include <map>
 #include <tuple>
 #include <type_traits>
 #include <utility>
 
-template <typename T, typename Signature>
-struct signature_impl;
 
-template <typename T, typename ReturnType, typename... Args>
-struct signature_impl<T, ReturnType(T::*)(Args...)>
-{
-    using type = ReturnType(Args...);
-};
-
-template <typename T>
-using signature_t = signature_impl<T, decltype(&T::operator())>;
-
-template <class AbstractProduct, typename IdentifierType>
+template <class AbstractProduct, typename IdentifierType, typename... ProductCreators>
 class Factory
 {
-    using AssociativeContainers = std::map<IdentifierType, boost::factory<AbstractProduct>>;
+    using AssociativeContainers = std::tuple<std::map<IdentifierType, boost::function<ProductCreators>>...>;
 public:
-    template <typename ProductCreator>
-    bool Register(const IdentifierType& id, ProductCreator creator) {
-        // auto &foo = std::get<std::map<IdentifierType, boost::factory<AbstractProduct>>>(associations_);
-        return associations_.emplace(id, creator).second;
+    template <typename Product, typename... Arguments>
+    bool Register(const IdentifierType& id, boost::function<Product(Arguments...)> creator) {
+        auto &foo = std::get<std::map<IdentifierType, boost::function<AbstractProduct(const Arguments&...)>>>(associations_);
+        return foo.emplace(id, creator).second;
     }
 
     bool Unregister(const IdentifierType& id) {
@@ -36,10 +25,11 @@ public:
     }
 
     template <typename... Arguments>
-    AbstractProduct CreateObject(const IdentifierType& id, Arguments&& ... args) {
-        auto i = associations_.find(id);
-        if (i != associations_.end()) {
-            return (i->second)(std::forward<Arguments>(args)...);
+    AbstractProduct CreateObject(const IdentifierType& id, Arguments&& ... args) const {
+        auto const &foo = std::get<std::map<IdentifierType, boost::function<AbstractProduct(const Arguments&...)>>>(associations_);
+        auto const i = foo.find(id);
+        if (i != foo.end()) {
+            return (i->second)(std::forward<Arguments...>(args)...);
         }
         throw std::runtime_error("Creator not found.");
     }
@@ -56,14 +46,20 @@ struct Arity {
 struct Nullary : Arity {};
 
 struct Unary : Arity {
-    Unary(double) {}
+    Unary() {}
+    Unary(double x) : x(x) {}
+
+    double x;
 };
 
 
 int main(void)
 {
-    Factory<Arity*, int> factory;
-    factory.Register(0, boost::factory<Nullary*>() );
-    // factory.Register(0, boost::function<Unary*(double)>(boost::bind(boost::factory<Unary*>(), _1)) );
+    Factory<Arity*, int, Arity*(), Arity*(const double&)> factory;
+    factory.Register(0, boost::function<Arity*()>{boost::factory<Nullary*>()} );
+    factory.Register(1, boost::function<Arity*(const double&)>{boost::bind(boost::factory<Unary*>(), _1)});
+    auto x = factory.CreateObject(1, 2.0);
+    assert(typeid(*x) == typeid(Unary));
+    x = factory.CreateObject(0);
+    assert(typeid(*x) == typeid(Nullary));
 }
-
