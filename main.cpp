@@ -55,7 +55,7 @@ private:
     struct dispatcher : boost::static_visitor<AbstractProduct>
     {
         // used for the leaves
-        template <IdentifierType ID, typename... Args>
+        template <typename... Args>
         void operator()(Args... args) { f(args...); }
         // For a vector, we recursively operate on the elements
         multifunction f;
