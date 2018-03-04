@@ -7,13 +7,30 @@
 #include <boost/function.hpp>
 #include <boost/variant.hpp>
 
+#include <cxxabi.h>
+
+#include <iostream>
 #include <map>
 #include <utility>
+#include <type_traits>
+#include <unordered_map>
+#include <vector>
+
 
 /*
-template <typename Callable, typename ReturnType, typename... Args>
-struct Impl<Callable, ReturnType(Callable::*)(Args...)> : Concept {
-  */
+template <typename T, typename Signature>
+struct signature_impl;
+
+template <typename T, typename ReturnType, typename... Args>
+struct signature_impl<T, ReturnType(T::*)(Args...)>
+{
+    using return_type = ReturnType;
+    using param_types = std::tuple<Args...>;
+};
+
+template <typename T>
+using signature_t = signature_impl<T, decltype(&T::operator())>;
+*/
 
 template <class AbstractProduct, typename IdentifierType, typename... ProductCreators>
 class Factory
@@ -21,26 +38,28 @@ class Factory
     using multifunction = boost::type_erasure::any< boost::mpl::vector< boost::type_erasure::copy_constructible<>,
     boost::type_erasure::typeid_<>, boost::type_erasure::relaxed, boost::type_erasure::callable<ProductCreators>... > >;
 
-    class variant_handler
+    using functions = boost::variant<std::function<ProductCreators>...>;
+
+    template <typename Signature>
+    struct dispatcher_impl;
+
+    template <typename ReturnType, typename... Args>
+    struct dispatcher_impl<ReturnType(Args...)>
     {
-    public:
-        void handle(IdentifierType id, const variant_type& arg)
+        ReturnType operator()(Args... args) const
         {
-            boost::apply_visitor(impl, arg);
+            int status;
+            std::cout << "static call to visitor: " << abi::__cxa_demangle(typeid(*this).name(), nullptr, 0, &status) << "\n";
         }
     };
 
-    struct dispatcher : boost::static_visitor<AbstractProduct>
+    struct dispatcher : boost::static_visitor<AbstractProduct>, dispatcher_impl<ProductCreators>...
     {
-        // used for the leaves
-        template <typename... Args>
-        void operator()(Args... args) { f(args...); }
-        // For a vector, we recursively operate on the elements
-        multifunction f;
     };
 
+    dispatcher impl;
 
-    std::map<IdentifierType, dispatcher> associations_;
+    std::map<IdentifierType, functions> associations_;
 
 public:
     template <typename ProductCreator>
@@ -54,6 +73,9 @@ public:
 
     template <typename... Arguments>
     AbstractProduct CreateObject(const IdentifierType& id, Arguments&& ... args) {
+
+        boost::apply_visitor(impl, args...);
+
         auto i = associations_.find(id);
         if (i != associations_.end()) {
             return (i->second)(std::forward<Arguments>(args)...);
@@ -75,7 +97,7 @@ struct Unary : Arity {
 
 int main(void)
 {
-    Factory<Arity*, int, Nullary*(), Unary*(double)> factory;
-    factory.Register(0, boost::factory<Nullary*>() );
-    factory.Register(0, boost::factory<Unary*>() );
+    Factory<Arity*, int, Arity*(), Arity*(const double&)> factory;
+    factory.Register(0, boost::function<Arity*()>( boost::factory<Nullary*>() ));
+    factory.Register(1, boost::function<Arity*(const double&)>(boost::factory<Unary*>()) );
 }
