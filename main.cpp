@@ -35,10 +35,12 @@ using signature_t = signature_impl<T, decltype(&T::operator())>;
 template <class AbstractProduct, typename IdentifierType, typename... ProductCreators>
 class Factory
 {
+    /*
     using multifunction = boost::type_erasure::any< boost::mpl::vector< boost::type_erasure::copy_constructible<>,
     boost::type_erasure::typeid_<>, boost::type_erasure::relaxed, boost::type_erasure::callable<ProductCreators>... > >;
+    */
 
-    using functions = boost::variant<std::function<ProductCreators>...>;
+    using function_variant = boost::variant<std::function<ProductCreators>...>;
 
     template <typename Signature>
     struct dispatcher_impl;
@@ -46,7 +48,7 @@ class Factory
     template <typename ReturnType, typename... Args>
     struct dispatcher_impl<ReturnType(Args...)>
     {
-        ReturnType operator()(Args... args) const
+        AbstractProduct operator()(Args... args) const
         {
             int status;
             std::cout << "static call to visitor: " << abi::__cxa_demangle(typeid(*this).name(), nullptr, 0, &status) << "\n";
@@ -59,7 +61,7 @@ class Factory
 
     dispatcher impl;
 
-    std::map<IdentifierType, functions> associations_;
+    std::map<IdentifierType, function_variant> associations_;
 
 public:
     template <typename ProductCreator>
@@ -73,12 +75,9 @@ public:
 
     template <typename... Arguments>
     AbstractProduct CreateObject(const IdentifierType& id, Arguments&& ... args) {
-
-        boost::apply_visitor(impl, args...);
-
         auto i = associations_.find(id);
         if (i != associations_.end()) {
-            return (i->second)(std::forward<Arguments>(args)...);
+            return boost::apply_visitor(impl, *i);
         }
         throw std::runtime_error("Creator not found.");
     }
@@ -100,4 +99,5 @@ int main(void)
     Factory<Arity*, int, Arity*(), Arity*(const double&)> factory;
     factory.Register(0, boost::function<Arity*()>( boost::factory<Nullary*>() ));
     factory.Register(1, boost::function<Arity*(const double&)>(boost::factory<Unary*>()) );
+    // factory.CreateObject(0);
 }
