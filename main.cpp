@@ -49,7 +49,7 @@ class Factory
 {
 
     using function_variant = boost::variant<std::function<ProductCreators>...>;
-/*
+
     template <typename ProductCreator>
     struct dispatcher_impl
     {
@@ -60,29 +60,15 @@ class Factory
             return nullptr;
         }
     };
-    */
 
     template <typename... CreateArguments>
-    struct dispatcher : boost::static_visitor<AbstractProduct>
+    struct dispatcher : boost::static_visitor<AbstractProduct>, dispatcher_impl<ProductCreators>...
     {
         std::tuple<CreateArguments...> args;
         static constexpr make_index_sequence<std::tuple_size<std::tuple<CreateArguments...>>::value> seq{};
 
         dispatcher(CreateArguments &&... args) : args{std::forward<CreateArguments>(args)...} {}
 
-        template <typename Creator>
-        AbstractProduct operator()(Creator const &f) const
-        {
-            int status;
-            std::cout << "static call to visitor: " << abi::__cxa_demangle(typeid(f).name(), nullptr, 0, &status) << "\n";
-            return apply(f, seq);
-        }
-
-        template <typename Function, std::size_t... Is>
-        AbstractProduct apply(Function const &f, index_sequence<Is...>) const
-        {
-            return f(std::get<Is>(args)...);
-        }
     };
 
 
