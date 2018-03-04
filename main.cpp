@@ -21,28 +21,6 @@ class Factory
     using multifunction = boost::type_erasure::any< boost::mpl::vector< boost::type_erasure::copy_constructible<>,
     boost::type_erasure::typeid_<>, boost::type_erasure::relaxed, boost::type_erasure::callable<ProductCreators>... > >;
 
-public:
-    template <typename ProductCreator>
-    bool Register(IdentifierType id, ProductCreator creator) {
-        // return associations_.emplace(id, creator).second;
-    }
-
-    bool Unregister(const IdentifierType& id) {
-        // return associations_.erase(id) == 1;
-    }
-
-    template <typename... Arguments>
-    AbstractProduct CreateObject(const IdentifierType& id, Arguments&& ... args) {
-        auto i = associations_.find(id);
-        if (i != associations_.end()) {
-            return (i->second)(std::forward<Arguments>(args)...);
-        }
-        throw std::runtime_error("Creator not found.");
-    }
-
-private:
-    using variant_type = boost::variant<int, double, std::string> ;
-
     class variant_handler
     {
     public:
@@ -61,7 +39,27 @@ private:
         multifunction f;
     };
 
+
     std::map<IdentifierType, dispatcher> associations_;
+
+public:
+    template <typename ProductCreator>
+    bool Register(IdentifierType id, ProductCreator creator) {
+        return associations_.emplace(id, creator).second;
+    }
+
+    bool Unregister(const IdentifierType& id) {
+        // return associations_.erase(id) == 1;
+    }
+
+    template <typename... Arguments>
+    AbstractProduct CreateObject(const IdentifierType& id, Arguments&& ... args) {
+        auto i = associations_.find(id);
+        if (i != associations_.end()) {
+            return (i->second)(std::forward<Arguments>(args)...);
+        }
+        throw std::runtime_error("Creator not found.");
+    }
 };
 
 struct Arity {
