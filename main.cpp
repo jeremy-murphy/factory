@@ -76,10 +76,6 @@ struct Unary : Arity {
 int main(void)
 {
     Factory<Arity*, int, Nullary*(), Unary*(double)> factory;
-    factory.Register(0, boost::factory<Nullary *>() );
-    // MultiCtors nullaryFactory = boost::bind( boost::factory<Nullary *>() );
-    // MultiCtors nullaryLambda = [](){ return new Nullary(); };
-    // MultiCtors unaryLambda = [](double x){ return new Unary(x); };
-    // MultiCtors unaryFactory = boost::bind( boost::factory<Unary *>(), _1 );
+    factory.Register(0, boost::factory<Nullary*>() );
+    factory.Register(0, boost::factory<Unary*>() );
 }
-
