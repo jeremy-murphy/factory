@@ -11,10 +11,8 @@
 
 #include <iostream>
 #include <map>
+#include <tuple>
 #include <utility>
-#include <type_traits>
-#include <unordered_map>
-#include <vector>
 
 
 /*
@@ -32,34 +30,61 @@ template <typename T>
 using signature_t = signature_impl<T, decltype(&T::operator())>;
 */
 
+template <std::size_t...Is> struct index_sequence {};
+
+template <std::size_t N, std::size_t...Is>
+struct build : public build<N - 1, N - 1, Is...> {};
+
+template <std::size_t...Is>
+struct build<0, Is...> {
+    using type = index_sequence<Is...>;
+};
+
+template <std::size_t N>
+using make_index_sequence = typename build<N>::type;
+
+
 template <class AbstractProduct, typename IdentifierType, typename... ProductCreators>
 class Factory
 {
-    /*
-    using multifunction = boost::type_erasure::any< boost::mpl::vector< boost::type_erasure::copy_constructible<>,
-    boost::type_erasure::typeid_<>, boost::type_erasure::relaxed, boost::type_erasure::callable<ProductCreators>... > >;
-    */
 
     using function_variant = boost::variant<std::function<ProductCreators>...>;
-
-    template <typename Signature>
-    struct dispatcher_impl;
-
-    template <typename ReturnType, typename... Args>
-    struct dispatcher_impl<ReturnType(Args...)>
+/*
+    template <typename ProductCreator>
+    struct dispatcher_impl
     {
-        AbstractProduct operator()(Args... args) const
+        AbstractProduct operator()(std::function<ProductCreator> const &f) const
         {
             int status;
             std::cout << "static call to visitor: " << abi::__cxa_demangle(typeid(*this).name(), nullptr, 0, &status) << "\n";
+            return nullptr;
+        }
+    };
+    */
+
+    template <typename... CreateArguments>
+    struct dispatcher : boost::static_visitor<AbstractProduct>
+    {
+        std::tuple<CreateArguments...> args;
+        static constexpr make_index_sequence<std::tuple_size<std::tuple<CreateArguments...>>::value> seq{};
+
+        dispatcher(CreateArguments &&... args) : args{std::forward<CreateArguments>(args)...} {}
+
+        template <typename Creator>
+        AbstractProduct operator()(Creator const &f) const
+        {
+            int status;
+            std::cout << "static call to visitor: " << abi::__cxa_demangle(typeid(f).name(), nullptr, 0, &status) << "\n";
+            return apply(f, seq);
+        }
+
+        template <typename Function, std::size_t... Is>
+        AbstractProduct apply(Function const &f, index_sequence<Is...>) const
+        {
+            return f(std::get<Is>(args)...);
         }
     };
 
-    struct dispatcher : boost::static_visitor<AbstractProduct>, dispatcher_impl<ProductCreators>...
-    {
-    };
-
-    dispatcher impl;
 
     std::map<IdentifierType, function_variant> associations_;
 
@@ -77,7 +102,8 @@ public:
     AbstractProduct CreateObject(const IdentifierType& id, Arguments&& ... args) {
         auto i = associations_.find(id);
         if (i != associations_.end()) {
-            return boost::apply_visitor(impl, *i);
+            dispatcher<Arguments...> impl(std::forward<Arguments>(args)...);
+            return boost::apply_visitor(impl, i->second);
         }
         throw std::runtime_error("Creator not found.");
     }
@@ -99,5 +125,6 @@ int main(void)
     Factory<Arity*, int, Arity*(), Arity*(const double&)> factory;
     factory.Register(0, boost::function<Arity*()>( boost::factory<Nullary*>() ));
     factory.Register(1, boost::function<Arity*(const double&)>(boost::factory<Unary*>()) );
-    // factory.CreateObject(0);
+    factory.CreateObject(0);
+    factory.CreateObject(1, 2);
 }
