@@ -52,7 +52,7 @@ private:
         }
     };
 
-    struct dispatcher : boost::static_visitor<void>
+    struct dispatcher : boost::static_visitor<AbstractProduct>
     {
         // used for the leaves
         template <IdentifierType ID, typename... Args>
