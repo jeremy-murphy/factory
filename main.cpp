@@ -43,7 +43,7 @@ using make_tuple_indices = build_indices<std::tuple_size<typename std::remove_re
 
 
 template <class AbstractProduct, typename IdentifierType, typename... ProductCreators>
-class Factory
+class multifactory
 {
     using function_variant = boost::variant<boost::function<ProductCreators>...>;
 
@@ -150,7 +150,7 @@ struct Unary : Arity {
 
 int main(void)
 {
-    Factory<Arity*, int, Arity*(), Arity*(const int&)> factory;
+    multifactory<Arity*, int, Arity*(), Arity*(const int&)> factory;
     factory.Register(0, boost::function<Arity*()>( boost::factory<Nullary*>() ));
     factory.Register(1, boost::function<Arity*(const int&)>(boost::factory<Unary*>()) );
     auto a = factory.CreateObject(0);
