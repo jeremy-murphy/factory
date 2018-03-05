@@ -49,24 +49,9 @@ class Factory
 
     std::map<IdentifierType, function_variant> associations_;
 
-    template <typename CreateArguments, typename... Signatures>
-    struct dispatcher_impl;
-
-    template <typename CreateArguments, typename Signature>
-    struct dispatcher_impl<CreateArguments, Signature>
+    template <typename Signature>
+    struct dispatch_foo
     {
-        CreateArguments args;
-
-        template <typename... Foo>
-        dispatcher_impl(Foo &&... args) : args{std::forward_as_tuple(args...)} {}
-
-        AbstractProduct operator()(boost::function<Signature> const &f) const
-        {
-            int status;
-            std::cout << "visitor: " << abi::__cxa_demangle(typeid(Signature).name(), nullptr, 0, &status) << "\n";
-            return apply(f, args, make_index_sequence<CreateArguments>{});
-        }
-
         template <typename CreateArgs, std::size_t... Indices>
         typename std::enable_if<std::is_convertible<CreateArgs, typename signature_t<Signature>::param_types>::value, AbstractProduct>::type
         apply(boost::function<Signature> const &f, CreateArgs && t, indices<Indices...>) const
@@ -82,14 +67,18 @@ class Factory
         }
     };
 
-    template <typename CreateArguments, typename Signature, typename... Signatures>
-    struct dispatcher_impl<CreateArguments, Signature, Signatures...> : dispatcher_impl<CreateArguments, Signatures...>
+    template <typename CreateArguments, typename... Signatures>
+    struct dispatcher_impl;
+
+    template <typename CreateArguments, typename Signature>
+    struct dispatcher_impl<CreateArguments, Signature> : dispatch_foo<Signature>
     {
-        using dispatcher_impl<CreateArguments, Signatures...>::operator();
-        using dispatcher_impl<CreateArguments, Signatures...>::args;
+        CreateArguments args;
 
         template <typename... Foo>
-        dispatcher_impl(Foo &&... args) : dispatcher_impl<CreateArguments, Signatures...>(std::forward<Foo>(args)...) {}
+        dispatcher_impl(Foo &&... args) : args{std::forward_as_tuple(args...)} {}
+
+        using dispatch_foo<Signature>::apply;
 
         AbstractProduct operator()(boost::function<Signature> const &f) const
         {
@@ -97,19 +86,24 @@ class Factory
             std::cout << "visitor: " << abi::__cxa_demangle(typeid(Signature).name(), nullptr, 0, &status) << "\n";
             return apply(f, args, make_index_sequence<CreateArguments>{});
         }
+    };
 
-        template <typename CreateArgs, std::size_t... Indices>
-        typename std::enable_if<std::is_convertible<CreateArgs, typename signature_t<Signature>::param_types>::value, AbstractProduct>::type
-        apply(boost::function<Signature> const &f, CreateArgs && t, indices<Indices...>) const
-        {
-            return f(std::get<Indices>(std::forward<CreateArgs>(t))...);
-        }
+    template <typename CreateArguments, typename Signature, typename... Signatures>
+    struct dispatcher_impl<CreateArguments, Signature, Signatures...> : dispatcher_impl<CreateArguments, Signatures...>, dispatch_foo<Signature>
+    {
+        using dispatcher_impl<CreateArguments, Signatures...>::operator();
+        using dispatcher_impl<CreateArguments, Signatures...>::args;
 
-        template <typename CreateArgs, std::size_t... Indices>
-        typename std::enable_if<!std::is_convertible<CreateArgs, typename signature_t<Signature>::param_types>::value, AbstractProduct>::type
-        apply(boost::function<Signature> const &, CreateArgs &&, indices<Indices...>) const
+        template <typename... Foo>
+        dispatcher_impl(Foo &&... args) : dispatcher_impl<CreateArguments, Signatures...>(std::forward<Foo>(args)...) {}
+
+        using dispatch_foo<Signature>::apply;
+
+        AbstractProduct operator()(boost::function<Signature> const &f) const
         {
-            return nullptr;
+            int status;
+            std::cout << "visitor: " << abi::__cxa_demangle(typeid(Signature).name(), nullptr, 0, &status) << "\n";
+            return apply(f, args, make_index_sequence<CreateArguments>{});
         }
     };
 
