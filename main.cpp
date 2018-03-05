@@ -47,28 +47,44 @@ using make_index_sequence = typename build<N>::type;
 template <class AbstractProduct, typename IdentifierType, typename... ProductCreators>
 class Factory
 {
-
     using function_variant = boost::variant<std::function<ProductCreators>...>;
 
-    template <typename ProductCreator>
-    struct dispatcher_impl
+    template <typename... Signatures>
+    struct dispatcher_impl;
+
+    template <typename Signature>
+    struct dispatcher_impl<Signature>
     {
-        AbstractProduct operator()(std::function<ProductCreator> const &f) const
+      AbstractProduct operator()(std::function<Signature> const &f) const
+      {
+        int status;
+        std::cout << "static call to visitor: " << abi::__cxa_demangle(typeid(f).name(), nullptr, 0, &status) << "\n";
+        return nullptr;
+      }
+    };
+
+    template <typename Signature, typename... Signatures>
+    struct dispatcher_impl<Signature, Signatures...> : dispatcher_impl<Signatures...>
+    {
+        using dispatcher_impl<Signatures...>::operator();
+
+        AbstractProduct operator()(std::function<Signature> const &f) const
         {
             int status;
-            std::cout << "static call to visitor: " << abi::__cxa_demangle(typeid(*this).name(), nullptr, 0, &status) << "\n";
+            std::cout << "static call to visitor: " << abi::__cxa_demangle(typeid(f).name(), nullptr, 0, &status) << "\n";
             return nullptr;
         }
     };
 
     template <typename... CreateArguments>
-    struct dispatcher : boost::static_visitor<AbstractProduct>, dispatcher_impl<ProductCreators>...
+    struct dispatcher : boost::static_visitor<AbstractProduct>, dispatcher_impl<ProductCreators...>
     {
         std::tuple<CreateArguments...> args;
-        static constexpr make_index_sequence<std::tuple_size<std::tuple<CreateArguments...>>::value> seq{};
+        // static constexpr make_index_sequence<std::tuple_size<std::tuple<CreateArguments...>>::value> seq{};
 
         dispatcher(CreateArguments &&... args) : args{std::forward<CreateArguments>(args)...} {}
 
+        using dispatcher_impl<ProductCreators...>::operator();
     };
 
 
