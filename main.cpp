@@ -29,17 +29,17 @@ template <typename T>
 using signature_t = signature_impl<T>;
 
 
-template <std::size_t... Is>
+template <std::size_t... Ints>
 struct indices {};
 
-template <std::size_t N, std::size_t... Is>
-struct build_indices : build_indices<N-1, N-1, Is...> {};
+template <std::size_t N, std::size_t... Ints>
+struct build_indices : build_indices<N-1, N-1, Ints...> {};
 
-template <std::size_t... Is>
-struct build_indices<0, Is...> : indices<Is...> {};
+template <std::size_t... Ints>
+struct build_indices<0, Ints...> : indices<Ints...> {};
 
 template <typename Tuple>
-using make_index_sequence = build_indices<std::tuple_size<typename std::remove_reference<Tuple>::type>::value>;
+using make_tuple_indices = build_indices<std::tuple_size<typename std::remove_reference<Tuple>::type>::value>;
 
 
 template <class AbstractProduct, typename IdentifierType, typename... ProductCreators>
@@ -84,7 +84,7 @@ class Factory
         {
             int status;
             std::cout << "visitor: " << abi::__cxa_demangle(typeid(Signature).name(), nullptr, 0, &status) << "\n";
-            return apply(f, args, make_index_sequence<CreateArguments>{});
+            return apply(f, args, make_tuple_indices<CreateArguments>{});
         }
     };
 
@@ -103,7 +103,7 @@ class Factory
         {
             int status;
             std::cout << "visitor: " << abi::__cxa_demangle(typeid(Signature).name(), nullptr, 0, &status) << "\n";
-            return apply(f, args, make_index_sequence<CreateArguments>{});
+            return apply(f, args, make_tuple_indices<CreateArguments>{});
         }
     };
 
