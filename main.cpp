@@ -14,7 +14,7 @@
 #include <tuple>
 #include <utility>
 
-
+// Tuple manipulation that is standard in C++17.
 /*
 template <typename T, typename Signature>
 struct signature_impl;
@@ -49,6 +49,8 @@ class Factory
 {
     using function_variant = boost::variant<std::function<ProductCreators>...>;
 
+    std::map<IdentifierType, function_variant> associations_;
+
     template <typename... Signatures>
     struct dispatcher_impl;
 
@@ -79,7 +81,7 @@ class Factory
     template <typename... CreateArguments>
     struct dispatcher : boost::static_visitor<AbstractProduct>, dispatcher_impl<ProductCreators...>
     {
-        std::tuple<CreateArguments...> args;
+        std::tuple<CreateArguments...> args; // TODO: How is operator() is dispatcher_impl going to access this?
         // static constexpr make_index_sequence<std::tuple_size<std::tuple<CreateArguments...>>::value> seq{};
 
         dispatcher(CreateArguments &&... args) : args{std::forward<CreateArguments>(args)...} {}
@@ -87,13 +89,10 @@ class Factory
         using dispatcher_impl<ProductCreators...>::operator();
     };
 
-
-    std::map<IdentifierType, function_variant> associations_;
-
 public:
     template <typename ProductCreator>
-    bool Register(IdentifierType id, ProductCreator creator) {
-        return associations_.emplace(id, creator).second;
+    bool Register(IdentifierType id, ProductCreator &&creator) {
+        return associations_.emplace(id, std::forward<ProductCreator>(creator)).second;
     }
 
     bool Unregister(const IdentifierType& id) {
