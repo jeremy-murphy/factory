@@ -1,92 +1,124 @@
-#include <boost/type_erasure/any.hpp>
-#include <boost/type_erasure/builtin.hpp>
-#include <boost/type_erasure/callable.hpp>
-#include <boost/mpl/vector.hpp>
-#include <boost/bind.hpp>
 #include <boost/functional/factory.hpp>
 #include <boost/function.hpp>
 #include <boost/variant.hpp>
 
 #include <cxxabi.h>
 
-#include <iostream>
 #include <map>
+#include <stdexcept>
 #include <tuple>
+#include <type_traits>
 #include <utility>
+// Just for debugging.
+#include <iostream>
+#include <typeinfo>
 
 // Tuple manipulation that is standard in C++17.
-/*
-template <typename T, typename Signature>
+
+template <typename Signature>
 struct signature_impl;
 
-template <typename T, typename ReturnType, typename... Args>
-struct signature_impl<T, ReturnType(T::*)(Args...)>
+template <typename ReturnType, typename... Args>
+struct signature_impl<ReturnType(Args...)>
 {
     using return_type = ReturnType;
     using param_types = std::tuple<Args...>;
 };
 
 template <typename T>
-using signature_t = signature_impl<T, decltype(&T::operator())>;
-*/
+using signature_t = signature_impl<T>;
 
-template <std::size_t...Is> struct index_sequence {};
 
-template <std::size_t N, std::size_t...Is>
-struct build : public build<N - 1, N - 1, Is...> {};
+template <std::size_t... Is>
+struct indices {};
 
-template <std::size_t...Is>
-struct build<0, Is...> {
-    using type = index_sequence<Is...>;
-};
+template <std::size_t N, std::size_t... Is>
+struct build_indices : build_indices<N-1, N-1, Is...> {};
 
-template <std::size_t N>
-using make_index_sequence = typename build<N>::type;
+template <std::size_t... Is>
+struct build_indices<0, Is...> : indices<Is...> {};
+
+template <typename Tuple>
+using make_index_sequence = build_indices<std::tuple_size<typename std::remove_reference<Tuple>::type>::value>;
 
 
 template <class AbstractProduct, typename IdentifierType, typename... ProductCreators>
 class Factory
 {
-    using function_variant = boost::variant<std::function<ProductCreators>...>;
+    using function_variant = boost::variant<boost::function<ProductCreators>...>;
 
     std::map<IdentifierType, function_variant> associations_;
 
-    template <typename... Signatures>
+    template <typename CreateArguments, typename... Signatures>
     struct dispatcher_impl;
 
-    template <typename Signature>
-    struct dispatcher_impl<Signature>
+    template <typename CreateArguments, typename Signature>
+    struct dispatcher_impl<CreateArguments, Signature>
     {
-      AbstractProduct operator()(std::function<Signature> const &f) const
-      {
-        int status;
-        std::cout << "static call to visitor: " << abi::__cxa_demangle(typeid(f).name(), nullptr, 0, &status) << "\n";
-        return nullptr;
-      }
-    };
+        CreateArguments args;
 
-    template <typename Signature, typename... Signatures>
-    struct dispatcher_impl<Signature, Signatures...> : dispatcher_impl<Signatures...>
-    {
-        using dispatcher_impl<Signatures...>::operator();
+        template <typename... Foo>
+        dispatcher_impl(Foo &&... args) : args{std::forward_as_tuple(args...)} {}
 
-        AbstractProduct operator()(std::function<Signature> const &f) const
+        AbstractProduct operator()(boost::function<Signature> const &f) const
         {
             int status;
-            std::cout << "static call to visitor: " << abi::__cxa_demangle(typeid(f).name(), nullptr, 0, &status) << "\n";
+            std::cout << "visitor: " << abi::__cxa_demangle(typeid(Signature).name(), nullptr, 0, &status) << "\n";
+            return apply(f, args, make_index_sequence<CreateArguments>{});
+        }
+
+        template <typename CreateArgs, std::size_t... Indices>
+        typename std::enable_if<std::is_convertible<CreateArgs, typename signature_t<Signature>::param_types>::value, AbstractProduct>::type
+        apply(boost::function<Signature> const &f, CreateArgs && t, indices<Indices...>) const
+        {
+            return f(std::get<Indices>(std::forward<CreateArgs>(t))...);
+        }
+
+        template <typename CreateArgs, std::size_t... Indices>
+        typename std::enable_if<!std::is_convertible<CreateArgs, typename signature_t<Signature>::param_types>::value, AbstractProduct>::type
+        apply(boost::function<Signature> const &, CreateArgs &&, indices<Indices...>) const
+        {
+            return nullptr;
+        }
+    };
+
+    template <typename CreateArguments, typename Signature, typename... Signatures>
+    struct dispatcher_impl<CreateArguments, Signature, Signatures...> : dispatcher_impl<CreateArguments, Signatures...>
+    {
+        using dispatcher_impl<CreateArguments, Signatures...>::operator();
+        using dispatcher_impl<CreateArguments, Signatures...>::args;
+
+        template <typename... Foo>
+        dispatcher_impl(Foo &&... args) : dispatcher_impl<CreateArguments, Signatures...>(std::forward<Foo>(args)...) {}
+
+        AbstractProduct operator()(boost::function<Signature> const &f) const
+        {
+            int status;
+            std::cout << "visitor: " << abi::__cxa_demangle(typeid(Signature).name(), nullptr, 0, &status) << "\n";
+            return apply(f, args, make_index_sequence<CreateArguments>{});
+        }
+
+        template <typename CreateArgs, std::size_t... Indices>
+        typename std::enable_if<std::is_convertible<CreateArgs, typename signature_t<Signature>::param_types>::value, AbstractProduct>::type
+        apply(boost::function<Signature> const &f, CreateArgs && t, indices<Indices...>) const
+        {
+            return f(std::get<Indices>(std::forward<CreateArgs>(t))...);
+        }
+
+        template <typename CreateArgs, std::size_t... Indices>
+        typename std::enable_if<!std::is_convertible<CreateArgs, typename signature_t<Signature>::param_types>::value, AbstractProduct>::type
+        apply(boost::function<Signature> const &, CreateArgs &&, indices<Indices...>) const
+        {
             return nullptr;
         }
     };
 
     template <typename... CreateArguments>
-    struct dispatcher : boost::static_visitor<AbstractProduct>, dispatcher_impl<ProductCreators...>
+    struct dispatcher : boost::static_visitor<AbstractProduct>, dispatcher_impl<std::tuple<CreateArguments...>, ProductCreators...>
     {
-        std::tuple<CreateArguments...> args; // TODO: How is operator() is dispatcher_impl going to access this?
-        // static constexpr make_index_sequence<std::tuple_size<std::tuple<CreateArguments...>>::value> seq{};
+        dispatcher(CreateArguments &&... args) : dispatcher_impl<std::tuple<CreateArguments...>, ProductCreators...>(std::forward<CreateArguments>(args)...) {}
 
-        dispatcher(CreateArguments &&... args) : args{std::forward<CreateArguments>(args)...} {}
-
-        using dispatcher_impl<ProductCreators...>::operator();
+        using dispatcher_impl<std::tuple<CreateArguments...>, ProductCreators...>::operator();
     };
 
 public:
@@ -96,7 +128,7 @@ public:
     }
 
     bool Unregister(const IdentifierType& id) {
-        // return associations_.erase(id) == 1;
+        return associations_.erase(id) == 1;
     }
 
     template <typename... Arguments>
@@ -117,15 +149,20 @@ struct Arity {
 struct Nullary : Arity {};
 
 struct Unary : Arity {
-    Unary(double) {}
+    Unary() {} // Also has nullary ctor.
+    Unary(int) {}
 };
 
 
 int main(void)
 {
-    Factory<Arity*, int, Arity*(), Arity*(const double&)> factory;
+    Factory<Arity*, int, Arity*(), Arity*(const int&)> factory;
     factory.Register(0, boost::function<Arity*()>( boost::factory<Nullary*>() ));
-    factory.Register(1, boost::function<Arity*(const double&)>(boost::factory<Unary*>()) );
-    factory.CreateObject(0);
-    factory.CreateObject(1, 2);
+    factory.Register(1, boost::function<Arity*(const int&)>(boost::factory<Unary*>()) );
+    auto a = factory.CreateObject(0);
+    assert(a);
+    assert(typeid(*a) == typeid(Nullary));
+    auto b = factory.CreateObject(1, 2);
+    assert(b);
+    assert(typeid(*b) == typeid(Unary));
 }
