@@ -1,3 +1,10 @@
+/*
+ * Copyright 2018 Jeremy William Murphy
+ * email: jeremy.william.murphy@gmail.com
+ *
+ * License coming...
+ */
+
 #include <boost/functional/factory.hpp>
 #include <boost/function.hpp>
 #include <boost/variant.hpp>
