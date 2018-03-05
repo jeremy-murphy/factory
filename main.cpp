@@ -2,8 +2,6 @@
 #include <boost/function.hpp>
 #include <boost/variant.hpp>
 
-#include <cxxabi.h>
-
 #include <map>
 #include <stdexcept>
 #include <tuple>
@@ -12,6 +10,7 @@
 // Just for debugging.
 #include <iostream>
 #include <typeinfo>
+#include <cxxabi.h>
 
 // Tuple manipulation that is standard in C++17.
 
@@ -45,9 +44,9 @@ using make_tuple_indices = build_indices<std::tuple_size<typename std::remove_re
 template <class AbstractProduct, typename IdentifierType, typename... ProductCreators>
 class multifactory
 {
-    using function_variant = boost::variant<boost::function<ProductCreators>...>;
+    using functions = boost::variant<boost::function<ProductCreators>...>;
 
-    std::map<IdentifierType, function_variant> associations_;
+    std::map<IdentifierType, functions> associations_;
 
     template <typename Signature>
     struct dispatch_foo
