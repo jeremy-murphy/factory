@@ -81,8 +81,8 @@ class multifactory
     {
         CreateArguments args;
 
-        template <typename... Foo>
-        dispatcher_impl(Foo &&... args) : args{std::forward_as_tuple(args...)} {}
+        template <typename... Args>
+        dispatcher_impl(Args &&... args) : args{std::forward_as_tuple(args...)} {}
 
         using dispatch_foo<Signature>::apply;
 
@@ -100,8 +100,8 @@ class multifactory
         using dispatcher_impl<CreateArguments, Signatures...>::operator();
         using dispatcher_impl<CreateArguments, Signatures...>::args;
 
-        template <typename... Foo>
-        dispatcher_impl(Foo &&... args) : dispatcher_impl<CreateArguments, Signatures...>(std::forward<Foo>(args)...) {}
+        template <typename... Args>
+        dispatcher_impl(Args &&... args) : dispatcher_impl<CreateArguments, Signatures...>(std::forward<Args>(args)...) {}
 
         using dispatch_foo<Signature>::apply;
 
