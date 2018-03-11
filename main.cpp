@@ -19,7 +19,6 @@
 #include <typeinfo>
 #include <cxxabi.h>
 
-// Tuple manipulation that is standard in C++17.
 
 template <typename Signature>
 struct signature_impl;
@@ -34,6 +33,8 @@ struct signature_impl<ReturnType(Args...)>
 template <typename T>
 using signature_t = signature_impl<T>;
 
+
+// Tuple manipulation replaced by std::apply in C++17.
 
 template <std::size_t... Ints>
 struct indices {};
