@@ -149,21 +149,31 @@ struct Arity {
 
 struct Nullary : Arity {};
 
+template <typename T>
 struct Unary : Arity {
     Unary() {} // Also has nullary ctor.
-    Unary(int) {}
+    Unary(T) {}
+};
+
+struct Binary : Arity {
+    Binary() {} // Also has nullary ctor.
+    Binary(int, int) {}
 };
 
 
 int main(void)
 {
-    multifactory<Arity*, int, Arity*(), Arity*(const int&)> factory;
+    multifactory<Arity*, int, Arity*(), Arity*(int const &), Arity*(int const &, int const&), Arity*(double const&)> factory;
     factory.Register(0, boost::function<Arity*()>( boost::factory<Nullary*>() ));
-    factory.Register(1, boost::function<Arity*(const int&)>(boost::factory<Unary*>()) );
+    factory.Register(1, boost::function<Arity*(int const &)>(boost::factory<Unary<int>*>()) );
+    factory.Register(2, boost::function<Arity*(int const &, int const &)>(boost::factory<Binary*>()) );
+    factory.Register(3, boost::function<Arity*(double const &)>(boost::factory<Unary<double>*>()) );
     auto a = factory.CreateObject(0);
     assert(a);
     assert(typeid(*a) == typeid(Nullary));
     auto b = factory.CreateObject(1, 2);
     assert(b);
-    assert(typeid(*b) == typeid(Unary));
+    assert(typeid(*b) == typeid(Unary<int>));
+    auto c = factory.CreateObject(2, 9, 2, 3, 4);
+    assert(!c);
 }
