@@ -61,14 +61,14 @@ class multifactory
     {
         template <typename CreateArgs, std::size_t... Indices>
         typename std::enable_if<std::is_convertible<CreateArgs, typename signature_t<Signature>::param_types>::value, AbstractProduct>::type
-        apply(boost::function<Signature> const &f, CreateArgs && t, indices<Indices...>) const
+        static apply(boost::function<Signature> const &f, CreateArgs && t, indices<Indices...>)
         {
             return f(std::get<Indices>(std::forward<CreateArgs>(t))...);
         }
 
         template <typename CreateArgs, std::size_t... Indices>
         typename std::enable_if<!std::is_convertible<CreateArgs, typename signature_t<Signature>::param_types>::value, AbstractProduct>::type
-        apply(boost::function<Signature> const &, CreateArgs &&, indices<Indices...>) const
+        static apply(boost::function<Signature> const &, CreateArgs &&, indices<Indices...>)
         {
             return nullptr;
         }
@@ -78,25 +78,23 @@ class multifactory
     struct dispatcher_impl;
 
     template <typename CreateArguments, typename Signature>
-    struct dispatcher_impl<CreateArguments, Signature> : dispatch_foo<Signature>
+    struct dispatcher_impl<CreateArguments, Signature>
     {
         CreateArguments args;
 
         template <typename... Args>
         dispatcher_impl(Args &&... args) : args{std::forward_as_tuple(args...)} {}
 
-        using dispatch_foo<Signature>::apply;
-
         AbstractProduct operator()(boost::function<Signature> const &f) const
         {
             int status;
             std::cout << "visitor: " << abi::__cxa_demangle(typeid(Signature).name(), nullptr, 0, &status) << "\n";
-            return apply(f, args, make_tuple_indices<CreateArguments>{});
+            return dispatch_foo<Signature>::apply(f, args, make_tuple_indices<CreateArguments>{});
         }
     };
 
     template <typename CreateArguments, typename Signature, typename... Signatures>
-    struct dispatcher_impl<CreateArguments, Signature, Signatures...> : dispatcher_impl<CreateArguments, Signatures...>, dispatch_foo<Signature>
+    struct dispatcher_impl<CreateArguments, Signature, Signatures...> : dispatcher_impl<CreateArguments, Signatures...>
     {
         using dispatcher_impl<CreateArguments, Signatures...>::operator();
         using dispatcher_impl<CreateArguments, Signatures...>::args;
@@ -104,13 +102,11 @@ class multifactory
         template <typename... Args>
         dispatcher_impl(Args &&... args) : dispatcher_impl<CreateArguments, Signatures...>(std::forward<Args>(args)...) {}
 
-        using dispatch_foo<Signature>::apply;
-
         AbstractProduct operator()(boost::function<Signature> const &f) const
         {
             int status;
             std::cout << "visitor: " << abi::__cxa_demangle(typeid(Signature).name(), nullptr, 0, &status) << "\n";
-            return apply(f, args, make_tuple_indices<CreateArguments>{});
+            return dispatch_foo<Signature>::apply(f, args, make_tuple_indices<CreateArguments>{});
         }
     };
 
