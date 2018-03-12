@@ -74,48 +74,20 @@ class multifactory
         }
     };
 
-    template <typename CreateArguments, typename... Signatures>
-    struct dispatcher_impl;
-
-    template <typename CreateArguments, typename Signature>
-    struct dispatcher_impl<CreateArguments, Signature>
-    {
-        CreateArguments args;
-
-        template <typename... Args>
-        dispatcher_impl(Args &&... args) : args{std::forward_as_tuple(args...)} {}
-
-        AbstractProduct operator()(boost::function<Signature> const &f) const
-        {
-            int status;
-            std::cout << "visitor: " << abi::__cxa_demangle(typeid(Signature).name(), nullptr, 0, &status) << "\n";
-            return dispatch_foo<Signature>::apply(f, args, make_tuple_indices<CreateArguments>{});
-        }
-    };
-
-    template <typename CreateArguments, typename Signature, typename... Signatures>
-    struct dispatcher_impl<CreateArguments, Signature, Signatures...> : dispatcher_impl<CreateArguments, Signatures...>
-    {
-        using dispatcher_impl<CreateArguments, Signatures...>::operator();
-        using dispatcher_impl<CreateArguments, Signatures...>::args;
-
-        template <typename... Args>
-        dispatcher_impl(Args &&... args) : dispatcher_impl<CreateArguments, Signatures...>(std::forward<Args>(args)...) {}
-
-        AbstractProduct operator()(boost::function<Signature> const &f) const
-        {
-            int status;
-            std::cout << "visitor: " << abi::__cxa_demangle(typeid(Signature).name(), nullptr, 0, &status) << "\n";
-            return dispatch_foo<Signature>::apply(f, args, make_tuple_indices<CreateArguments>{});
-        }
-    };
-
     template <typename... CreateArguments>
-    struct dispatcher : boost::static_visitor<AbstractProduct>, dispatcher_impl<std::tuple<CreateArguments...>, ProductCreators...>
+    struct dispatcher : boost::static_visitor<AbstractProduct>
     {
-        dispatcher(CreateArguments &&... args) : dispatcher_impl<std::tuple<CreateArguments...>, ProductCreators...>(std::forward<CreateArguments>(args)...) {}
+        std::tuple<CreateArguments...> args;
 
-        using dispatcher_impl<std::tuple<CreateArguments...>, ProductCreators...>::operator();
+        dispatcher(CreateArguments const&... args) : args{std::forward_as_tuple(args...)} {}
+
+        template <typename Signature>
+        AbstractProduct operator()(boost::function<Signature> const &f) const
+        {
+            int status;
+            std::cout << "visitor: " << abi::__cxa_demangle(typeid(Signature).name(), nullptr, 0, &status) << "\n";
+            return dispatch_foo<Signature>::apply(f, args, make_tuple_indices<std::tuple<CreateArguments...>>{});
+        }
     };
 
 public:
@@ -129,10 +101,10 @@ public:
     }
 
     template <typename... Arguments>
-    AbstractProduct CreateObject(const IdentifierType& id, Arguments&& ... args) {
+    AbstractProduct CreateObject(const IdentifierType& id, Arguments const& ... args) {
         auto i = associations_.find(id);
         if (i != associations_.end()) {
-            dispatcher<Arguments...> impl(std::forward<Arguments>(args)...);
+            dispatcher<Arguments...> impl(args...);
             return boost::apply_visitor(impl, i->second);
         }
         throw std::runtime_error("Creator not found.");
