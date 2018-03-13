@@ -77,9 +77,9 @@ class multifactory
     template <typename... CreateArguments>
     struct dispatcher : boost::static_visitor<AbstractProduct>
     {
-        std::tuple<CreateArguments...> args;
+        std::tuple<CreateArguments&&...> args;
 
-        dispatcher(CreateArguments const&... args) : args{std::forward_as_tuple(args...)} {}
+        dispatcher(CreateArguments &&... args) : args{std::forward_as_tuple(std::forward<CreateArguments>(args)...)} {}
 
         template <typename Signature>
         AbstractProduct operator()(boost::function<Signature> const &f) const
@@ -101,10 +101,10 @@ public:
     }
 
     template <typename... Arguments>
-    AbstractProduct CreateObject(const IdentifierType& id, Arguments const& ... args) {
+    AbstractProduct CreateObject(const IdentifierType& id, Arguments && ... args) {
         auto i = associations_.find(id);
         if (i != associations_.end()) {
-            dispatcher<Arguments...> impl(args...);
+            dispatcher<Arguments...> impl(std::forward<Arguments>(args)...);
             return boost::apply_visitor(impl, i->second);
         }
         throw std::runtime_error("Creator not found.");
@@ -120,7 +120,8 @@ struct Nullary : Arity {};
 template <typename T>
 struct Unary : Arity {
     Unary() {} // Also has nullary ctor.
-    Unary(T) {}
+    Unary(T x) : value{x} {}
+    T value;
 };
 
 struct Binary : Arity {
@@ -131,17 +132,27 @@ struct Binary : Arity {
 
 int main(void)
 {
-    multifactory<Arity*, int, Arity*(), Arity*(int const &), Arity*(int const &, int const&), Arity*(double const&)> factory;
+    multifactory<Arity*, int, Arity*(), Arity*(int const &), Arity*(int const &, int const&), Arity*(double const&), Arity*(std::string const &)> factory;
     factory.Register(0, boost::function<Arity*()>( boost::factory<Nullary*>() ));
     factory.Register(1, boost::function<Arity*(int const &)>(boost::factory<Unary<int>*>()) );
     factory.Register(2, boost::function<Arity*(int const &, int const &)>(boost::factory<Binary*>()) );
     factory.Register(3, boost::function<Arity*(double const &)>(boost::factory<Unary<double>*>()) );
+    factory.Register(4, boost::function<Arity*(std::string const &)>(boost::factory<Unary<std::string>*>()) );
     auto a = factory.CreateObject(0);
     assert(a);
     assert(typeid(*a) == typeid(Nullary));
-    auto b = factory.CreateObject(1, 2);
+    const int x = 99;
+    auto b = factory.CreateObject(1, x); // Pass a const lvalue.
     assert(b);
     assert(typeid(*b) == typeid(Unary<int>));
-    auto c = factory.CreateObject(2, 9, 2, 3, 4);
+    assert(dynamic_cast<Unary<int>*>(b)->value == 99);
+    auto c = factory.CreateObject(2, 9, 2, 3, 4); // Constructor signature does not match.
     assert(!c);
+    auto d = factory.CreateObject(3, 42); // Implicitly converts values for constructor.
+    assert(d);
+    assert(typeid(*d) == typeid(Unary<double>));
+    auto e = factory.CreateObject(4, "foo");
+    assert(e);
+    assert(typeid(*e) == typeid(Unary<std::string>));
+    assert(dynamic_cast<Unary<std::string>*>(e)->value == "foo");
 }
