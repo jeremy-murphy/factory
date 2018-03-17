@@ -56,24 +56,6 @@ class multifactory
 
     std::map<IdentifierType, functions> associations_;
 
-    template <typename Signature>
-    struct dispatch_foo
-    {
-        template <typename CreateArgs, std::size_t... Indices>
-        typename std::enable_if<std::is_convertible<CreateArgs, typename signature_t<Signature>::param_types>::value, AbstractProduct>::type
-        static apply(boost::function<Signature> const &f, CreateArgs && t, indices<Indices...>)
-        {
-            return f(std::get<Indices>(std::forward<CreateArgs>(t))...);
-        }
-
-        template <typename CreateArgs, std::size_t... Indices>
-        typename std::enable_if<!std::is_convertible<CreateArgs, typename signature_t<Signature>::param_types>::value, AbstractProduct>::type
-        static apply(boost::function<Signature> const &, CreateArgs &&, indices<Indices...>)
-        {
-            return nullptr;
-        }
-    };
-
     template <typename... CreateArguments>
     struct dispatcher : boost::static_visitor<AbstractProduct>
     {
@@ -86,7 +68,21 @@ class multifactory
         {
             int status;
             std::cout << "visitor: " << abi::__cxa_demangle(typeid(Signature).name(), nullptr, 0, &status) << "\n";
-            return dispatch_foo<Signature>::apply(f, args, make_tuple_indices<std::tuple<CreateArguments...>>{});
+            return apply(f, args, make_tuple_indices<std::tuple<CreateArguments...>>{});
+        }
+
+        template <typename Signature, typename CreateArgs, std::size_t... Indices>
+        typename std::enable_if<std::is_convertible<CreateArgs, typename signature_t<Signature>::param_types>::value, AbstractProduct>::type
+        static apply(boost::function<Signature> const &f, CreateArgs && t, indices<Indices...>)
+        {
+            return f(std::get<Indices>(std::forward<CreateArgs>(t))...);
+        }
+        
+        template <typename Signature, typename CreateArgs, std::size_t... Indices>
+        typename std::enable_if<!std::is_convertible<CreateArgs, typename signature_t<Signature>::param_types>::value, AbstractProduct>::type
+        static apply(boost::function<Signature> const &, CreateArgs &&, indices<Indices...>)
+        {
+            return nullptr;
         }
     };
 
